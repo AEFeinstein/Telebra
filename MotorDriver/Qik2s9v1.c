@@ -18,7 +18,6 @@ typedef enum
     GET_ERROR_BYTE       = 0x02,
     GET_CONFIG_PARAM     = 0x03,
     SET_CONFIG_PARAM     = 0x04,
-    UNUSED               = 0x05,
     M0_COAST             = 0x06,
     M1_COAST             = 0x07,
     M0_FORWARD           = 0x08,
@@ -112,6 +111,20 @@ void processResponse(uint8_t byte)
         case SET_CONFIG_PARAM:
         {
             printf("SET_CONFIGURATION_PARAM %d\n", byte);
+            break;
+        }
+        /* These commands do not have responses */
+        case M0_COAST:
+        case M1_COAST:
+        case M0_FORWARD:
+        case M0_FORWARD_128:
+        case M0_REVERSE:
+        case M0_REVERSE_128:
+        case M1_FORWARD:
+        case M1_FORWARD_128:
+        case M1_REVERSE:
+        case M1_REVERSE_128:
+        {
             break;
         }
     }

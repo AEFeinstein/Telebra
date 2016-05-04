@@ -14,7 +14,7 @@
  * @param argv unused
  * @return 1 for an error, 0 for success
  */
-int main(int argc, char** argv)
+int main(__attribute__((unused)) int argc, __attribute__((unused)) char** argv)
 {
 
     /* The path to the serial port on a Raspberry Pi B+ */

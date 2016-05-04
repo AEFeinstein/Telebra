@@ -1,4 +1,4 @@
-# Makefile for Linux terminal alication
+# Makefile for Linux terminal application
 
 CXX          := gcc
 CXXFLAGS     := -Wall -Wextra -pedantic -g -c

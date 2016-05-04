@@ -5,9 +5,9 @@ CXXFLAGS     := -Wall -Wextra -pedantic -g -c
 INC          :=
 LDLIBS       := -lpthread
 LDFLAGS      :=
-SRCFILES_CPP := $(shell find . -maxdepth 2 -name "*.c")
-SRCFILES     := $(SRCFILES_CPP)
-OBJECTS      := $(OBJECTS) $(patsubst %.cpp, %.o, $(SRCFILES_CPP))
+SRCFILES_C   := $(shell find . -maxdepth 2 -name "*.c")
+SRCFILES     := $(SRCFILES_C)
+OBJECTS      := $(OBJECTS) $(patsubst %.c, %.o, $(SRCFILES_C))
 EXECUTABLE   := MotorDriver
 
 all: $(SRCFILES) $(EXECUTABLE)
@@ -18,7 +18,7 @@ clean:
 $(EXECUTABLE): $(OBJECTS) 
 	$(CXX) -o $@ $(OBJECTS) $(LDLIBS) $(LDFLAGS)
 
-%.o: %.cpp
+%.o: %.c
 	$(CXX) $(CXXFLAGS) $(INC) $< -o $@
 	
 %.o: %.ino

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+	<H1>Zebra Remote PoC</H1>
+	<br>
+
+	<button onmousedown="startMotor(directions.UP)"
+		onmouseup="stopMotor(directions.UP)">Up</button>
+	<br>
+	<button onmousedown="startMotor(directions.LEFT)"
+		onmouseup="stopMotor(directions.LEFT)">Left</button>
+	<button onmousedown="startMotor(directions.RIGHT)"
+		onmouseup="stopMotor(directions.RIGHT)">Right</button>
+	<br>
+	<button onmousedown="startMotor(directions.DOWN)"
+		onmouseup="stopMotor(directions.DOWN)">Down</button>
+	<br>
+	<p id="dbg0">dbg0</p>
+	<p id="dbg1">dbg1</p>
+	<p id="dbg2">dbg2</p>
+
+	<script>
+		var directions = {
+			NO_DIR : 0,
+			UP : 1,
+			DOWN : 2,
+			LEFT : 3,
+			RIGHT : 4
+		};
+
+		var timerHandle = [ 0, 0, 0, 0 ];
+		var keyPressed = 0;
+		var timer = 0;
+
+		document.onkeydown = function(e) {
+			var dir = -1;
+			switch (e.keyCode) {
+			case 37:
+				dir = directions.LEFT;
+				break;
+			case 38:
+				dir = directions.UP;
+				break;
+			case 39:
+				dir = directions.RIGHT;
+				break;
+			case 40:
+				dir = directions.DOWN;
+				break;
+			}
+
+			if (dir != -1) {
+				if (keyPressed == 0) {
+					startMotor(dir);
+				}
+			}
+		};
+
+		document.onkeyup = function(e) {
+			var dir = -1;
+			switch (e.keyCode) {
+			case 37:
+				dir = directions.LEFT;
+				break;
+			case 38:
+				dir = directions.UP;
+				break;
+			case 39:
+				dir = directions.RIGHT;
+				break;
+			case 40:
+				dir = directions.DOWN;
+				break;
+			}
+			if (dir == keyPressed) {
+				stopMotor(dir);
+			}
+		};
+
+		function startMotor(dir) {
+			keyPressed = dir;
+			timerHandle[dir] = setTimeout(startMotor, 1000, dir);
+			document.getElementById("dbg0").innerHTML = getDirString(dir) + " "
+					+ timer;
+			timer++;
+			sendMotorPost(getDirString(dir), "START");
+		}
+
+		function stopMotor(dir) {
+			sendMotorPost(getDirString(dir), "STOP");
+			clearTimeout(timerHandle[dir]);
+			timer = 0;
+			keyPressed = 0;
+		}
+
+		function getDirString(dir) {
+			switch (dir) {
+			case directions.UP:
+				return "UP";
+			case directions.DOWN:
+				return "DOWN";
+			case directions.LEFT:
+				return "LEFT";
+			case directions.RIGHT:
+				return "RIGHT";
+			default:
+				return "";
+			}
+		}
+
+		function sendMotorPost(direction, startOrStop) {
+
+			var url = "motor_control.c";
+			var postData = direction + "_" + startOrStop;
+			var xhttp = new XMLHttpRequest();
+			xhttp.open("POST", url, true);
+			xhttp.setRequestHeader("Content-type", "text/plain;charset=UTF-8");
+			xhttp.send(postData);
+
+			document.getElementById("dbg1").innerHTML = "POST to " + url + ": "
+					+ postData;
+		}
+	</script>
+
+</body>
+</html>

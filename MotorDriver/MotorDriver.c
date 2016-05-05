@@ -5,6 +5,7 @@
 
 #include "SerialPort.h"
 #include "Qik2s9v1.h"
+#include "httpd.h"
 
 /**
  * The main function. Spin up the serial port in a separate thread and
@@ -16,33 +17,44 @@
  */
 int main(__attribute__((unused)) int argc, __attribute__((unused)) char** argv)
 {
-
     /* The path to the serial port on a Raspberry Pi B+ */
     char serialPortPath[] = "/dev/ttyAMA0";
 
     /* Create and start a thread to read from the serial port */
     pthread_t serialThread;
-
     if (pthread_create(&serialThread, NULL, readSerial, (void*)serialPortPath))
     {
-        fprintf(stderr, "Error creating thread\n");
+        fprintf(stderr, "Error creating serial thread\n");
         return 1;
     }
+
+    /* The port to serve the webpage on */
+    uint16_t port = 43742;
+
+    /* Create and start a thread to do web stuff */
+    pthread_t httpdThread;
+    if (pthread_create(&httpdThread, NULL, initializeHttpd, (void*)(&port)))
+    {
+        fprintf(stderr, "Error creating httpd thread\n");
+        return 1;
+    }
+
+    /* Get some initial info */
+    getErrorByte(DEFAULT_DEVICE_ID);
+    getFirmwareVersion(DEFAULT_DEVICE_ID);
+    getErrorByte(DEFAULT_DEVICE_ID);
+    getConfigurationParameter(DEFAULT_DEVICE_ID, DEVICE_ID);
+    getErrorByte(DEFAULT_DEVICE_ID);
+    getConfigurationParameter(DEFAULT_DEVICE_ID, PWM_PARAMETER);
+    getErrorByte(DEFAULT_DEVICE_ID);
+    getConfigurationParameter(DEFAULT_DEVICE_ID, SHUTDOWN_MOTOR_ON_ERROR);
+    getErrorByte(DEFAULT_DEVICE_ID);
+    getConfigurationParameter(DEFAULT_DEVICE_ID, SERIAL_TIMEOUT);
 
     /* Do this forever */
     while(1)
     {
-        getErrorByte(DEFAULT_DEVICE_ID);
-        getFirmwareVersion(DEFAULT_DEVICE_ID);
-        getErrorByte(DEFAULT_DEVICE_ID);
-        getConfigurationParameter(DEFAULT_DEVICE_ID, DEVICE_ID);
-        getErrorByte(DEFAULT_DEVICE_ID);
-        getConfigurationParameter(DEFAULT_DEVICE_ID, PWM_PARAMETER);
-        getErrorByte(DEFAULT_DEVICE_ID);
-        getConfigurationParameter(DEFAULT_DEVICE_ID, SHUTDOWN_MOTOR_ON_ERROR);
-        getErrorByte(DEFAULT_DEVICE_ID);
-        getConfigurationParameter(DEFAULT_DEVICE_ID, SERIAL_TIMEOUT);
-        sleep(5);
+        ;
     }
 
     return 0;

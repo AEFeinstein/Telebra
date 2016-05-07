@@ -20,20 +20,22 @@ int main(__attribute__((unused)) int argc, __attribute__((unused)) char** argv)
     /* The path to the serial port on a Raspberry Pi B+ */
     char serialPortPath[] = "/dev/ttyAMA0";
 
-    /* Create and start a thread to read from the serial port */
+    /* The port to serve the webpage on */
+    uint16_t port = 43742;
+
+    /* Threads */
     pthread_t serialThread;
+    pthread_t httpdThread;
+
+    /* Create and start a thread to read from the serial port */
     if (pthread_create(&serialThread, NULL, readSerial, (void*)serialPortPath))
     {
         fprintf(stderr, "Error creating serial thread\n");
         return 1;
     }
 
-    /* The port to serve the webpage on */
-    uint16_t port = 43742;
-
     /* Create and start a thread to do web stuff */
-    pthread_t httpdThread;
-    if (pthread_create(&httpdThread, NULL, initializeHttpd, (void*)(&port)))
+    if (pthread_create(&httpdThread, NULL, httpdMain, (void*)(&port)))
     {
         fprintf(stderr, "Error creating httpd thread\n");
         return 1;

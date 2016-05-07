@@ -1,6 +1,6 @@
 #ifndef _HTTPD_H_
 #define _HTTPD_H_
 
-void* initializeHttpd(void*);
+void* httpdMain(void*);
 
-#endif //_HTTPD_H_
+#endif /* _HTTPD_H_ */

@@ -60,6 +60,7 @@ void* readSerial(void* vp)
 void initializeSerialPort(char* serialPort)
 {
     struct termios termAttr;
+    speed_t baudRate;
 
     /* Attempt to open the serial port */
     SerialPortFileDescrptor = open(serialPort,
@@ -85,7 +86,7 @@ void initializeSerialPort(char* serialPort)
     tcgetattr(SerialPortFileDescrptor, &termAttr);
 
     /* Set Control modes */
-    speed_t baudRate = B38400;             /* Set the I/O baud at 38400*/
+    baudRate = B38400;             /* Set the I/O baud at 38400*/
     cfsetispeed(&termAttr, baudRate);
     cfsetospeed(&termAttr, baudRate);
     termAttr.c_cflag &= ~PARENB;            /* Turn off even parity */

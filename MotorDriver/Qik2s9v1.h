@@ -30,7 +30,7 @@ typedef enum
     is interrupted by another command packet, a format error will be
     generated. */
 
-    TIMEOUT            = 0x80, /*!< It is possible to use a configuration
+    TIMEOUT            = 0x80  /*!< It is possible to use a configuration
     parameter to enable the qik’s serial timeout feature. When enabled, the qik
     will generate a timeout error if the timeout period set by the configuration
     parameter elapses. The timeout timer is reset every time a valid command
@@ -80,7 +80,7 @@ typedef enum
     affect the motors. This parameter has a default value of 1 (shut down the
     motors on any error) and valid values for this parameter are 0 or 1. */
 
-    SERIAL_TIMEOUT          = 3, /*!< When this parameter has a value of 0, the
+    SERIAL_TIMEOUT          = 3  /*!< When this parameter has a value of 0, the
     serial timeout feature is inactive. Otherwise, the value of this parameter
     controls how much time can elapse between receptions of valid command
     packets before a serial timeout error is generated. This can be used as a
@@ -129,5 +129,7 @@ void setM0Forward(uint8_t deviceId, uint8_t speed);
 void setM0Reverse(uint8_t deviceId, uint8_t speed);
 void setM1Forward(uint8_t deviceId, uint8_t speed);
 void setM1Reverse(uint8_t deviceId, uint8_t speed);
+
+void processMotorControl(char* postContent, int32_t contentLength);
 
 #endif /* _QIK_2s9v1_H_ */

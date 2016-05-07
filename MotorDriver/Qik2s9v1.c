@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "Qik2s9v1.h"
 #include "SerialPort.h"
@@ -15,19 +16,19 @@
 typedef enum
 {
     GET_FIRMWARE_VERSION = 0x01,
-    GET_ERROR_BYTE       = 0x02,
-    GET_CONFIG_PARAM     = 0x03,
-    SET_CONFIG_PARAM     = 0x04,
-    M0_COAST             = 0x06,
-    M1_COAST             = 0x07,
-    M0_FORWARD           = 0x08,
-    M0_FORWARD_128       = 0x09,
-    M0_REVERSE           = 0x0A,
-    M0_REVERSE_128       = 0x0B,
-    M1_FORWARD           = 0x0C,
-    M1_FORWARD_128       = 0x0D,
-    M1_REVERSE           = 0x0E,
-    M1_REVERSE_128       = 0x0F
+    GET_ERROR_BYTE = 0x02,
+    GET_CONFIG_PARAM = 0x03,
+    SET_CONFIG_PARAM = 0x04,
+    M0_COAST = 0x06,
+    M1_COAST = 0x07,
+    M0_FORWARD = 0x08,
+    M0_FORWARD_128 = 0x09,
+    M0_REVERSE = 0x0A,
+    M0_REVERSE_128 = 0x0B,
+    M1_FORWARD = 0x0C,
+    M1_FORWARD_128 = 0x0D,
+    M1_REVERSE = 0x0E,
+    M1_REVERSE_128 = 0x0F
 } QikCommand_t;
 
 volatile QikCommand_t pendingCmd; /*!< Keep track of the current sent command */
@@ -55,7 +56,7 @@ uint64_t getCurrentTime(void)
  * @param buf A pointer to the command to send
  * @param len The length of the command to send
  * @param expectResponse true if this command expects a response,
- *                       false otherwise
+ * false otherwise
  */
 void sendCommand(uint8_t * buf, size_t len, bool expectResponse)
 {
@@ -63,7 +64,7 @@ void sendCommand(uint8_t * buf, size_t len, bool expectResponse)
     while ((cmdSentTimestamp + CMD_TIMEOUT_USEC) > getCurrentTime()
             && pendingCmd != 0)
     {
-        ; /* You spin me right round, baby right round */
+; /* You spin me right round, baby right round */
     }
 
     if(expectResponse)
@@ -141,7 +142,10 @@ void processResponse(uint8_t byte)
  */
 void getFirmwareVersion(uint8_t deviceId)
 {
-    uint8_t msg[] = { START_BYTE, deviceId, GET_FIRMWARE_VERSION };
+    uint8_t msg[3];
+    msg[0] = START_BYTE;
+    msg[1] = deviceId;
+    msg[2] = GET_FIRMWARE_VERSION;
     sendCommand(msg, sizeof(msg), true);
 }
 
@@ -163,7 +167,10 @@ void getFirmwareVersion(uint8_t deviceId)
  */
 void getErrorByte(uint8_t deviceId)
 {
-    uint8_t msg[] = { START_BYTE, deviceId, GET_ERROR_BYTE };
+    uint8_t msg[3];
+    msg[0] = START_BYTE;
+    msg[1] = deviceId;
+    msg[2] = GET_ERROR_BYTE;
     sendCommand(msg, sizeof(msg), true);
 }
 
@@ -176,7 +183,11 @@ void getErrorByte(uint8_t deviceId)
  */
 void getConfigurationParameter(uint8_t deviceId, config_parameter_t parameter)
 {
-    uint8_t msg[] = { START_BYTE, deviceId, GET_CONFIG_PARAM, parameter };
+    uint8_t msg[3];
+    msg[0] = START_BYTE;
+    msg[1] = deviceId;
+    msg[2] = GET_CONFIG_PARAM;
+    msg[3] = parameter;
     sendCommand(msg, sizeof(msg), true);
 }
 
@@ -193,13 +204,19 @@ void getConfigurationParameter(uint8_t deviceId, config_parameter_t parameter)
  * @param val The value to set the configuration parameter to
  */
 void setConfigurationParameter(uint8_t deviceId, config_parameter_t parameter,
-                               uint8_t val)
+        uint8_t val)
 {
     /* The last two bytes are magic bytes to make sure config parameters
      * don't get accidentally set
      */
-    uint8_t msg[] = { START_BYTE, deviceId, SET_CONFIG_PARAM, parameter,
-                      val, 0x55, 0x2A };
+    uint8_t msg[7];
+    msg[0] = START_BYTE;
+    msg[1] = deviceId;
+    msg[2] = SET_CONFIG_PARAM;
+    msg[3] = parameter;
+    msg[4] = val;
+    msg[5] = 0x55;
+    msg[6] = 0x2A;
     sendCommand(msg, sizeof(msg), true);
 }
 
@@ -211,7 +228,10 @@ void setConfigurationParameter(uint8_t deviceId, config_parameter_t parameter,
  */
 void setM0Coast(uint8_t deviceId)
 {
-    uint8_t msg[] = { START_BYTE, deviceId, M0_COAST };
+    uint8_t msg[3];
+    msg[0] = START_BYTE;
+    msg[1] = deviceId;
+    msg[2] = M0_COAST;
     sendCommand(msg, sizeof(msg), false);
 }
 
@@ -226,12 +246,20 @@ void setM0Forward(uint8_t deviceId, uint8_t speed)
 {
     if(speed > 127)
     {
-        uint8_t msg[] = { START_BYTE, deviceId, M0_FORWARD_128, speed - 128 };
+        uint8_t msg[3];
+        msg[0] = START_BYTE;
+        msg[1] = deviceId;
+        msg[2] = M0_FORWARD_128;
+        msg[3] = speed - 128;
         sendCommand(msg, sizeof(msg), false);
     }
     else
     {
-        uint8_t msg[] = { START_BYTE, deviceId, M0_FORWARD, speed };
+        uint8_t msg[3];
+        msg[0] = START_BYTE;
+        msg[1] = deviceId;
+        msg[2] = M0_FORWARD;
+        msg[3] = speed;
         sendCommand(msg, sizeof(msg), false);
     }
 }
@@ -247,12 +275,20 @@ void setM0Reverse(uint8_t deviceId, uint8_t speed)
 {
     if(speed > 127)
     {
-        uint8_t msg[] = { START_BYTE, deviceId, M0_REVERSE_128, speed - 128 };
+        uint8_t msg[3];
+        msg[0] = START_BYTE;
+        msg[1] = deviceId;
+        msg[2] = M0_REVERSE_128;
+        msg[3] = speed - 128;
         sendCommand(msg, sizeof(msg), false);
     }
     else
     {
-        uint8_t msg[] = { START_BYTE, deviceId, M0_REVERSE, speed };
+        uint8_t msg[3];
+        msg[0] = START_BYTE;
+        msg[1] = deviceId;
+        msg[2] = M0_REVERSE;
+        msg[3] = speed;
         sendCommand(msg, sizeof(msg), false);
     }
 }
@@ -265,7 +301,10 @@ void setM0Reverse(uint8_t deviceId, uint8_t speed)
  */
 void setM1Coast(uint8_t deviceId)
 {
-    uint8_t msg[] = { START_BYTE, deviceId, M1_COAST };
+    uint8_t msg[3];
+    msg[0] = START_BYTE;
+    msg[1] = deviceId;
+    msg[2] = M1_COAST;
     sendCommand(msg, sizeof(msg), false);
 }
 
@@ -280,12 +319,20 @@ void setM1Forward(uint8_t deviceId, uint8_t speed)
 {
     if(speed > 127)
     {
-        uint8_t msg[] = { START_BYTE, deviceId, M1_FORWARD_128, speed - 128 };
+        uint8_t msg[3];
+        msg[0] = START_BYTE;
+        msg[1] = deviceId;
+        msg[2] = M1_FORWARD_128;
+        msg[3] = speed - 128;
         sendCommand(msg, sizeof(msg), false);
     }
     else
     {
-        uint8_t msg[] = { START_BYTE, deviceId, M1_FORWARD, speed };
+        uint8_t msg[3];
+        msg[0] = START_BYTE;
+        msg[1] = deviceId;
+        msg[2] = M1_FORWARD;
+        msg[3] = speed;
         sendCommand(msg, sizeof(msg), false);
     }
 }
@@ -301,12 +348,77 @@ void setM1Reverse(uint8_t deviceId, uint8_t speed)
 {
     if(speed > 127)
     {
-        uint8_t msg[] = { START_BYTE, deviceId, M1_REVERSE_128, speed - 128 };
+        uint8_t msg[3];
+        msg[0] = START_BYTE;
+        msg[1] = deviceId;
+        msg[2] = M1_REVERSE_128;
+        msg[3] = speed - 128;
         sendCommand(msg, sizeof(msg), false);
     }
     else
     {
-        uint8_t msg[] = { START_BYTE, deviceId, M1_REVERSE, speed };
+        uint8_t msg[3];
+        msg[0] = START_BYTE;
+        msg[1] = deviceId;
+        msg[2] = M1_REVERSE;
+        msg[3] = speed;
         sendCommand(msg, sizeof(msg), false);
+    }
+}
+
+/**
+ * Process a POST to motor_control.c
+ *
+ * @param postContent a string command: (UP|DOWN|LEFT|RIGHT)_(START_STOP)
+ * @param contentLength the length of the content
+ */
+void processMotorControl(char* postContent, int32_t contentLength)
+{
+    uint8_t speed;
+    char *dir, *start;
+    const char delim[2] = "_";
+
+    printf("processMotorControl (%d) %s\n", contentLength, postContent);
+
+    /* get the first token */
+    dir = strtok(postContent, delim);
+    start = strtok(NULL, delim);
+
+    if(0 == strcmp(start, "START"))
+    {
+        speed = 0xFF;
+    }
+    else if(0 == strcmp(start, "STOP"))
+    {
+        speed = 0;
+    }
+    else
+    {
+        return;
+    }
+
+    if(0 == strcmp(dir, "UP"))
+    {
+        setM0Forward(DEFAULT_DEVICE_ID, speed);
+        setM1Forward(DEFAULT_DEVICE_ID, speed);
+    }
+    else if (0 == strcmp(dir, "DOWN"))
+    {
+        setM0Reverse(DEFAULT_DEVICE_ID, speed);
+        setM1Reverse(DEFAULT_DEVICE_ID, speed);
+    }
+    else if (0 == strcmp(dir, "LEFT"))
+    {
+        setM0Forward(DEFAULT_DEVICE_ID, speed);
+        setM1Reverse(DEFAULT_DEVICE_ID, speed);
+    }
+    else if (0 == strcmp(dir, "RIGHT"))
+    {
+        setM0Reverse(DEFAULT_DEVICE_ID, speed);
+        setM1Forward(DEFAULT_DEVICE_ID, speed);
+    }
+    else
+    {
+        return;
     }
 }

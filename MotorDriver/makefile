@@ -1,7 +1,7 @@
 # Makefile for Linux terminal application
 
 CXX          := gcc
-CXXFLAGS     := -Wall -Wextra -pedantic -g -c
+CXXFLAGS     := -Wall -Wextra -pedantic -g -c -std=c89 -D_XOPEN_SOURCE
 INC          :=
 LDLIBS       := -lpthread
 LDFLAGS      :=

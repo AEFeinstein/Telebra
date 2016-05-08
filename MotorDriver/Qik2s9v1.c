@@ -4,11 +4,16 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "Qik2s9v1.h"
 #include "SerialPort.h"
 
-#define CMD_TIMEOUT_USEC 100000 /*!< 100ms max wait time for a response */
+/* Definitions */
+#define CMD_TIMEOUT_USEC  100000 /*!< 100ms max wait time for a response */
+#define MOTOR_TIMEOUT    2000000 /*!< 2 seconds in microseconds */
+
+#define QIK_ACTION_QUEUE_SIZE 1024
 
 #define START_BYTE 0xAA /*!< Every command starts with this byte to autobaud */
 
@@ -31,10 +36,20 @@ typedef enum
     M1_REVERSE_128 = 0x0F
 } QikCommand_t;
 
-volatile QikCommand_t pendingCmd; /*!< Keep track of the current sent command */
-uint64_t cmdSentTimestamp; /*!< Keep track of when the last command was sent */
+volatile QikCommand_t pendingCmd = 0; /*!< Keep track of the current sent command */
+uint64_t cmdSentTimestamp = 0; /*!< Keep track of when the last command was sent */
+uint64_t motorShutoffTime = 0; /*!< The time to shut off the motor if no TCP commands are received */
+pthread_mutex_t qikMutex; /*!< Mutex to make sure outbound serial is kosher */
+
+/* Queue Variables */
+uint8_t qikCommandQueue[QIK_ACTION_QUEUE_SIZE] = {0}; /*!< A circular queue of qik commands */
+int16_t qikCommandQueueHead = 0; /*!< The head index of the qikCommandQueue[] */
+int16_t qikCommandQueueTail = 0; /*!< The tail index of the qikCommandQueue[] */
+
 
 /* Internal function prototypes */
+uint8_t QueueQikCommand(uint8_t * buf, uint8_t len, bool expectResponse);
+void DequeueQikCommand(void);
 void sendCommand(uint8_t * buf, size_t len, bool expectResponse);
 uint64_t getCurrentTime(void);
 
@@ -46,91 +61,6 @@ uint64_t getCurrentTime(void)
     struct timeval tp;
     gettimeofday(&tp, NULL);
     return tp.tv_usec + (tp.tv_sec * 1000000);
-}
-
-/**
- * If there is a current outgoing command, wait for the response to be
- * received. Then send the given command and mark the time and command,
- * if a response is expected
- *
- * @param buf A pointer to the command to send
- * @param len The length of the command to send
- * @param expectResponse true if this command expects a response,
- * false otherwise
- */
-void sendCommand(uint8_t * buf, size_t len, bool expectResponse)
-{
-    /* While there is a pending command that hasn't timed out yet, spin */
-    while ((cmdSentTimestamp + CMD_TIMEOUT_USEC) > getCurrentTime()
-            && pendingCmd != 0)
-    {
-; /* You spin me right round, baby right round */
-    }
-
-    if(expectResponse)
-    {
-        /* Mark the current time and pending command */
-        cmdSentTimestamp = getCurrentTime();
-        pendingCmd = buf[2];
-    }
-    else
-    {
-        pendingCmd = 0;
-    }
-
-    /* Send the message */
-    writeToSerialPort(buf, len);
-}
-
-/**
- * Process a response byte
- *
- * @param byte The byte the Qik sent back
- */
-void processResponse(uint8_t byte)
-{
-    switch (pendingCmd)
-    {
-        case GET_FIRMWARE_VERSION:
-        {
-            printf("GET_FIRMWARE_VERSION %d\n", byte);
-            break;
-        }
-
-        case GET_ERROR_BYTE:
-        {
-            printf("GET_ERROR_BYTE %d\n", byte);
-            break;
-        }
-
-        case GET_CONFIG_PARAM:
-        {
-            printf("GET_CONFIGURATION_PARAM %d\n", byte);
-            break;
-        }
-
-        case SET_CONFIG_PARAM:
-        {
-            printf("SET_CONFIGURATION_PARAM %d\n", byte);
-            break;
-        }
-        /* These commands do not have responses */
-        case M0_COAST:
-        case M1_COAST:
-        case M0_FORWARD:
-        case M0_FORWARD_128:
-        case M0_REVERSE:
-        case M0_REVERSE_128:
-        case M1_FORWARD:
-        case M1_FORWARD_128:
-        case M1_REVERSE:
-        case M1_REVERSE_128:
-        {
-            break;
-        }
-    }
-
-    pendingCmd = 0;
 }
 
 /**
@@ -146,7 +76,7 @@ void getFirmwareVersion(uint8_t deviceId)
     msg[0] = START_BYTE;
     msg[1] = deviceId;
     msg[2] = GET_FIRMWARE_VERSION;
-    sendCommand(msg, sizeof(msg), true);
+    QueueQikCommand(msg, sizeof(msg), true);
 }
 
 /**
@@ -171,7 +101,7 @@ void getErrorByte(uint8_t deviceId)
     msg[0] = START_BYTE;
     msg[1] = deviceId;
     msg[2] = GET_ERROR_BYTE;
-    sendCommand(msg, sizeof(msg), true);
+    QueueQikCommand(msg, sizeof(msg), true);
 }
 
 /**
@@ -183,12 +113,12 @@ void getErrorByte(uint8_t deviceId)
  */
 void getConfigurationParameter(uint8_t deviceId, config_parameter_t parameter)
 {
-    uint8_t msg[3];
+    uint8_t msg[4];
     msg[0] = START_BYTE;
     msg[1] = deviceId;
     msg[2] = GET_CONFIG_PARAM;
     msg[3] = parameter;
-    sendCommand(msg, sizeof(msg), true);
+    QueueQikCommand(msg, sizeof(msg), true);
 }
 
 /**
@@ -217,7 +147,7 @@ void setConfigurationParameter(uint8_t deviceId, config_parameter_t parameter,
     msg[4] = val;
     msg[5] = 0x55;
     msg[6] = 0x2A;
-    sendCommand(msg, sizeof(msg), true);
+    QueueQikCommand(msg, sizeof(msg), true);
 }
 
 /**
@@ -232,7 +162,7 @@ void setM0Coast(uint8_t deviceId)
     msg[0] = START_BYTE;
     msg[1] = deviceId;
     msg[2] = M0_COAST;
-    sendCommand(msg, sizeof(msg), false);
+    QueueQikCommand(msg, sizeof(msg), false);
 }
 
 /**
@@ -246,21 +176,21 @@ void setM0Forward(uint8_t deviceId, uint8_t speed)
 {
     if(speed > 127)
     {
-        uint8_t msg[3];
+        uint8_t msg[4];
         msg[0] = START_BYTE;
         msg[1] = deviceId;
         msg[2] = M0_FORWARD_128;
         msg[3] = speed - 128;
-        sendCommand(msg, sizeof(msg), false);
+        QueueQikCommand(msg, sizeof(msg), false);
     }
     else
     {
-        uint8_t msg[3];
+        uint8_t msg[4];
         msg[0] = START_BYTE;
         msg[1] = deviceId;
         msg[2] = M0_FORWARD;
         msg[3] = speed;
-        sendCommand(msg, sizeof(msg), false);
+        QueueQikCommand(msg, sizeof(msg), false);
     }
 }
 
@@ -275,21 +205,21 @@ void setM0Reverse(uint8_t deviceId, uint8_t speed)
 {
     if(speed > 127)
     {
-        uint8_t msg[3];
+        uint8_t msg[4];
         msg[0] = START_BYTE;
         msg[1] = deviceId;
         msg[2] = M0_REVERSE_128;
         msg[3] = speed - 128;
-        sendCommand(msg, sizeof(msg), false);
+        QueueQikCommand(msg, sizeof(msg), false);
     }
     else
     {
-        uint8_t msg[3];
+        uint8_t msg[4];
         msg[0] = START_BYTE;
         msg[1] = deviceId;
         msg[2] = M0_REVERSE;
         msg[3] = speed;
-        sendCommand(msg, sizeof(msg), false);
+        QueueQikCommand(msg, sizeof(msg), false);
     }
 }
 
@@ -305,7 +235,7 @@ void setM1Coast(uint8_t deviceId)
     msg[0] = START_BYTE;
     msg[1] = deviceId;
     msg[2] = M1_COAST;
-    sendCommand(msg, sizeof(msg), false);
+    QueueQikCommand(msg, sizeof(msg), false);
 }
 
 /**
@@ -319,21 +249,21 @@ void setM1Forward(uint8_t deviceId, uint8_t speed)
 {
     if(speed > 127)
     {
-        uint8_t msg[3];
+        uint8_t msg[4];
         msg[0] = START_BYTE;
         msg[1] = deviceId;
         msg[2] = M1_FORWARD_128;
         msg[3] = speed - 128;
-        sendCommand(msg, sizeof(msg), false);
+        QueueQikCommand(msg, sizeof(msg), false);
     }
     else
     {
-        uint8_t msg[3];
+        uint8_t msg[4];
         msg[0] = START_BYTE;
         msg[1] = deviceId;
         msg[2] = M1_FORWARD;
         msg[3] = speed;
-        sendCommand(msg, sizeof(msg), false);
+        QueueQikCommand(msg, sizeof(msg), false);
     }
 }
 
@@ -348,21 +278,21 @@ void setM1Reverse(uint8_t deviceId, uint8_t speed)
 {
     if(speed > 127)
     {
-        uint8_t msg[3];
+        uint8_t msg[4];
         msg[0] = START_BYTE;
         msg[1] = deviceId;
         msg[2] = M1_REVERSE_128;
         msg[3] = speed - 128;
-        sendCommand(msg, sizeof(msg), false);
+        QueueQikCommand(msg, sizeof(msg), false);
     }
     else
     {
-        uint8_t msg[3];
+        uint8_t msg[4];
         msg[0] = START_BYTE;
         msg[1] = deviceId;
         msg[2] = M1_REVERSE;
         msg[3] = speed;
-        sendCommand(msg, sizeof(msg), false);
+        QueueQikCommand(msg, sizeof(msg), false);
     }
 }
 
@@ -421,4 +351,199 @@ void processMotorControl(char* postContent, int32_t contentLength)
     {
         return;
     }
+}
+
+/**
+ * Queue up an action to send to the qik motor controller. This can be
+ * called from any thread and may block if two threads are trying to
+ * queue commands at the same time.
+ *
+ * @param buf The command to queue
+ * @param len The length of the command to queue
+ * @param expectResponse Whether or not this command expects a response
+ */
+uint8_t QueueQikCommand(uint8_t * buf, uint8_t len, bool expectResponse)
+{
+    size_t i;
+    int16_t sizeUsed;
+
+    /* Request a mutex lock */
+    pthread_mutex_lock(&qikMutex);
+
+    /* Figure out how much queue is currently used */
+    sizeUsed = qikCommandQueueTail - qikCommandQueueHead;
+    if(sizeUsed < 0)
+    {
+        sizeUsed += QIK_ACTION_QUEUE_SIZE;
+    }
+
+    /* Make sure there is enough space in the queue */
+    if(!(sizeUsed + len + 2 < QIK_ACTION_QUEUE_SIZE))
+    {
+        /* Not enough space, return */
+        return 0;
+    }
+
+    /* Add the length byte */
+    qikCommandQueue[qikCommandQueueTail] = len;
+    qikCommandQueueTail = (qikCommandQueueTail + 1) % QIK_ACTION_QUEUE_SIZE;
+
+    /* Add the expected response */
+    qikCommandQueue[qikCommandQueueTail] = expectResponse;
+    qikCommandQueueTail = (qikCommandQueueTail + 1) % QIK_ACTION_QUEUE_SIZE;
+
+    /* Add the payload */
+    for(i = 0; i < len; i++)
+    {
+        qikCommandQueue[qikCommandQueueTail] = buf[i];
+        qikCommandQueueTail = (qikCommandQueueTail + 1) % QIK_ACTION_QUEUE_SIZE;
+    }
+
+    /* Unlock the mutex */
+    pthread_mutex_unlock(&qikMutex);
+
+    /* Command was added, return 1 */
+    return 1;
+}
+
+/**
+ * Check the qikCommandQueue[] for any pending commands, and execute
+ * one if it exists
+ */
+void DequeueQikCommand(void)
+{
+    uint8_t i, len, expectsResponse;
+    uint8_t tmpCmd[16] = {0};
+
+    /* If there's something in the queue */
+    if(qikCommandQueueHead != qikCommandQueueTail)
+    {
+        /* Pull out the length byte */
+        len = qikCommandQueue[qikCommandQueueHead];
+        qikCommandQueueHead = (qikCommandQueueHead + 1) % QIK_ACTION_QUEUE_SIZE;
+
+        /* Pull out the expects response byte */
+        expectsResponse = qikCommandQueue[qikCommandQueueHead];
+        qikCommandQueueHead = (qikCommandQueueHead + 1) % QIK_ACTION_QUEUE_SIZE;
+
+        /* Pull out the payload */
+        for(i = 0; i < len; i++)
+        {
+            tmpCmd[i] = qikCommandQueue[qikCommandQueueHead];
+            qikCommandQueueHead = (qikCommandQueueHead + 1) % QIK_ACTION_QUEUE_SIZE;
+        }
+
+        /* Send the serial command */
+        sendCommand(tmpCmd, len, expectsResponse);
+    }
+}
+
+/**
+ * If there is a current outgoing command, wait for the response to be
+ * received. Then send the given command and mark the time and command,
+ * if a response is expected
+ *
+ * @param buf A pointer to the command to send
+ * @param len The length of the command to send
+ * @param expectResponse true if this command expects a response,
+ * false otherwise
+ */
+void sendCommand(uint8_t * buf, size_t len, bool expectResponse)
+{
+    /* While there is a pending command that hasn't timed out yet, spin */
+    while ((cmdSentTimestamp + CMD_TIMEOUT_USEC) > getCurrentTime()
+            && pendingCmd != 0)
+    {
+        ; /* You spin me right round, baby right round */
+    }
+
+    if(expectResponse)
+    {
+        /* Mark the current time and pending command */
+        cmdSentTimestamp = getCurrentTime();
+        pendingCmd = buf[2];
+    }
+    else
+    {
+        pendingCmd = 0;
+    }
+
+    /* Check if this is a motor command */
+    if(M0_FORWARD <= buf[2] && buf[2] <=  M1_REVERSE_128)
+    {
+        /* Mark when the motors should be automatically stopped */
+        motorShutoffTime = getCurrentTime() + MOTOR_TIMEOUT;
+    }
+
+    /* Send the message */
+    writeToSerialPort(buf, len);
+}
+
+/**
+ * Process a response byte
+ *
+ * @param byte The byte the Qik sent back
+ */
+void processResponse(uint8_t byte)
+{
+    switch (pendingCmd)
+    {
+        case GET_FIRMWARE_VERSION:
+        {
+            printf("GET_FIRMWARE_VERSION %c\n", byte);
+            break;
+        }
+
+        case GET_ERROR_BYTE:
+        {
+            printf("GET_ERROR_BYTE %d\n", byte);
+            break;
+        }
+
+        case GET_CONFIG_PARAM:
+        {
+            printf("GET_CONFIGURATION_PARAM %d\n", byte);
+            break;
+        }
+
+        case SET_CONFIG_PARAM:
+        {
+            printf("SET_CONFIGURATION_PARAM %d\n", byte);
+            break;
+        }
+        /* These commands do not have responses */
+        case M0_COAST:
+        case M1_COAST:
+        case M0_FORWARD:
+        case M0_FORWARD_128:
+        case M0_REVERSE:
+        case M0_REVERSE_128:
+        case M1_FORWARD:
+        case M1_FORWARD_128:
+        case M1_REVERSE:
+        case M1_REVERSE_128:
+        {
+            break;
+        }
+    }
+
+    pendingCmd = 0;
+}
+
+/**
+ * Turn off the motors if it's been 2 seconds without a command
+ * Process any queued qik commands
+ */
+void processQikState(void)
+{
+    /* Check if the motor should be automatically stopped */
+    if(motorShutoffTime != 0 && getCurrentTime() > motorShutoffTime)
+    {
+        motorShutoffTime = 0;
+        setM0Forward(DEFAULT_DEVICE_ID, 0);
+        setM1Forward(DEFAULT_DEVICE_ID, 0);
+    }
+
+    /* Deque any pending actions */
+    DequeueQikCommand();
 }

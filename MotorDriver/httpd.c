@@ -32,9 +32,13 @@ void serve_file(int32_t, const char*);
 int32_t get_line(int32_t, char*, int32_t);
 void error_die(const char*);
 
-/**********************************************************************/
-/* TODO write something */
-/**********************************************************************/
+/**
+ * Initialize the httpd server and spin around waiting for incoming
+ * connections. If there is a connection, create a thread to handle
+ * it, and keep listening for connections
+ *
+ * @param vp A pointer to the uint16_t port to use
+ */
 void* httpdMain(void* vp)
 {
     int32_t server_sock = -1;

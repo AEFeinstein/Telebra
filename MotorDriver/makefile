@@ -3,7 +3,7 @@
 CXX          := gcc
 CXXFLAGS     := -Wall -Wextra -pedantic -g -c -std=c89 -D_XOPEN_SOURCE
 INC          :=
-LDLIBS       := -lpthread
+LDLIBS       := -lpthread -lrt -lpigpio
 LDFLAGS      :=
 SRCFILES_C   := $(shell find . -maxdepth 2 -name "*.c")
 SRCFILES     := $(SRCFILES_C)

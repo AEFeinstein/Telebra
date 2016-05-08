@@ -130,7 +130,7 @@ void setM0Reverse(uint8_t deviceId, uint8_t speed);
 void setM1Forward(uint8_t deviceId, uint8_t speed);
 void setM1Reverse(uint8_t deviceId, uint8_t speed);
 
-void processMotorControl(char* postContent, int32_t contentLength);
+void processMotorControl(char* postContent);
 void processQikState(void);
 
 #endif /* _QIK_2s9v1_H_ */

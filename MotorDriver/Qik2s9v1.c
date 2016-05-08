@@ -302,17 +302,17 @@ void setM1Reverse(uint8_t deviceId, uint8_t speed)
  * @param postContent a string command: (UP|DOWN|LEFT|RIGHT)_(START_STOP)
  * @param contentLength the length of the content
  */
-void processMotorControl(char* postContent, int32_t contentLength)
+void processMotorControl(char* postContent)
 {
     uint8_t speed;
     char *dir, *start;
     const char delim[2] = "_";
 
-    printf("processMotorControl (%d) %s\n", contentLength, postContent);
-
     /* get the first token */
     dir = strtok(postContent, delim);
     start = strtok(NULL, delim);
+
+    printf("processMotorControl (%s) %s\n", dir, start);
 
     if(0 == strcmp(start, "START"))
     {
@@ -367,6 +367,7 @@ uint8_t QueueQikCommand(uint8_t * buf, uint8_t len, bool expectResponse)
     size_t i;
     int16_t sizeUsed;
 
+    printf("QueueQikCommand %d %d\n", len, expectResponse);
     /* Request a mutex lock */
     pthread_mutex_lock(&qikMutex);
 
@@ -399,6 +400,8 @@ uint8_t QueueQikCommand(uint8_t * buf, uint8_t len, bool expectResponse)
         qikCommandQueueTail = (qikCommandQueueTail + 1) % QIK_ACTION_QUEUE_SIZE;
     }
 
+    printf("qikCommandQueue %4d %4d\n", qikCommandQueueHead, qikCommandQueueTail);
+
     /* Unlock the mutex */
     pthread_mutex_unlock(&qikMutex);
 
@@ -418,6 +421,7 @@ void DequeueQikCommand(void)
     /* If there's something in the queue */
     if(qikCommandQueueHead != qikCommandQueueTail)
     {
+        printf("Deque\n");
         /* Pull out the length byte */
         len = qikCommandQueue[qikCommandQueueHead];
         qikCommandQueueHead = (qikCommandQueueHead + 1) % QIK_ACTION_QUEUE_SIZE;
@@ -432,6 +436,8 @@ void DequeueQikCommand(void)
             tmpCmd[i] = qikCommandQueue[qikCommandQueueHead];
             qikCommandQueueHead = (qikCommandQueueHead + 1) % QIK_ACTION_QUEUE_SIZE;
         }
+
+        printf("qikCommandQueue %4d %4d\n", qikCommandQueueHead, qikCommandQueueTail);
 
         /* Send the serial command */
         sendCommand(tmpCmd, len, expectsResponse);
@@ -469,10 +475,38 @@ void sendCommand(uint8_t * buf, size_t len, bool expectResponse)
     }
 
     /* Check if this is a motor command */
-    if(M0_FORWARD <= buf[2] && buf[2] <=  M1_REVERSE_128)
+    switch((QikCommand_t)buf[2])
     {
-        /* Mark when the motors should be automatically stopped */
-        motorShutoffTime = getCurrentTime() + MOTOR_TIMEOUT;
+        case M0_FORWARD:
+        case M0_REVERSE:
+        case M1_FORWARD:
+        case M1_REVERSE:
+        {
+            if(buf[3] != 0)
+            {
+                /* Set the automatic shutoff if this starts the motor */
+                motorShutoffTime = getCurrentTime() + MOTOR_TIMEOUT;
+            }
+            break;
+        }
+        case M0_FORWARD_128:
+        case M0_REVERSE_128:
+        case M1_FORWARD_128:
+        case M1_REVERSE_128:
+        {
+            /* Set the automatic shutoff */
+            motorShutoffTime = getCurrentTime() + MOTOR_TIMEOUT;
+            break;
+        }
+        case GET_CONFIG_PARAM:
+        case SET_CONFIG_PARAM:
+        case GET_ERROR_BYTE:
+        case GET_FIRMWARE_VERSION:
+        case M0_COAST:
+        case M1_COAST:
+        {
+            break;
+        }
     }
 
     /* Send the message */

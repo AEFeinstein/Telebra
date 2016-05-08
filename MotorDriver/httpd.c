@@ -277,15 +277,10 @@ void* accept_request(void* clientPtr)
  *             path to the CGI script */
 /**********************************************************************/
 void execute_cgi(int32_t client, const char* path, const char* method,
-                 const char* query_string)
+        const char* query_string)
 {
     char buf[1024];
-    int32_t cgi_output[2];
-    int32_t cgi_input[2];
-    pid_t pid;
-    int32_t status;
     int32_t i;
-    char c;
     int32_t numchars = 1;
     int32_t content_length = -1;
     char postContent[1024];
@@ -327,99 +322,54 @@ void execute_cgi(int32_t client, const char* path, const char* method,
     sprintf(buf, "HTTP/1.0 200 OK\r\n");
     send(client, buf, strlen(buf), 0);
 
-    if (pipe(cgi_output) < 0)
+    if (path[strlen(path) - 2] == '.' && path[strlen(path) - 1] == 'c')
     {
-        cannot_execute(client);
-        return;
-    }
+        /* If the path ends in .c, don't process it as a script
+         * Instead run some C code!
+         */
 
-    if (pipe(cgi_input) < 0)
-    {
-        cannot_execute(client);
-        return;
-    }
-
-    if ((pid = fork()) < 0)
-    {
-        cannot_execute(client);
-        return;
-    }
-
-    if (pid == 0)   /* child: CGI script */
-    {
-        if (path[strlen(path) - 2] == '.' && path[strlen(path) - 1] == 'c')
+        if (strcasecmp(method, "GET") == 0)
         {
-            /* If the path ends in .c, don't process it as a script
-             * Instead run some C code!
-             */
-
-            if (strcasecmp(method, "GET") == 0)
-            {
-                printf("C GET: %s\n", query_string);
-            }
-            else if (strcasecmp(method, "POST") == 0)
-            {
-                /* Get the post content */
-                memset(postContent, 0, sizeof(postContent));
-                read(cgi_input[0], postContent, sizeof(postContent));
-            }
-
-            if (0 == strcasecmp(path, "htdocs/motor_control.c"))
-            {
-                processMotorControl(postContent, content_length);
-            }
+            printf("C GET: %s\n", query_string);
         }
-        else
+        else if (strcasecmp(method, "POST") == 0)
         {
-            /* If the path doesn't end in .c, process it as a script */
-            char meth_env[255];
-            char query_env[255];
-            char length_env[255];
-
-            dup2(cgi_output[1], 1);
-            dup2(cgi_input[0], 0);
-            close(cgi_output[0]);
-            close(cgi_input[1]);
-            sprintf(meth_env, "REQUEST_METHOD=%s", method);
-            putenv(meth_env);
-
-            if (strcasecmp(method, "GET") == 0)
-            {
-                sprintf(query_env, "QUERY_STRING=%s", query_string);
-                putenv(query_env);
-            }
-            else if (strcasecmp(method, "POST") == 0)
-            {
-                sprintf(length_env, "CONTENT_LENGTH=%d", content_length);
-                putenv(length_env);
-            }
-
-            execl(path, path, NULL);
-            exit(0);
-        }
-    }
-    else    /* parent */
-    {
-        close(cgi_output[1]);
-        close(cgi_input[0]);
-
-        if (strcasecmp(method, "POST") == 0)
-        {
+            /* Get the post content */
+            memset(postContent, 0, sizeof(postContent));
             for (i = 0; i < content_length; i++)
             {
-                recv(client, &c, 1, 0);
-                write(cgi_input[1], &c, 1);
+                recv(client, &postContent[i], 1, 0);
             }
         }
 
-        while (read(cgi_output[0], &c, 1) > 0)
+        if (0 == strcasecmp(path, "htdocs/motor_control.c"))
         {
-            send(client, &c, 1, 0);
+            processMotorControl(postContent);
+        }
+    }
+    else
+    {
+        /* If the path doesn't end in .c, process it as a script */
+        char meth_env[255];
+        char query_env[255];
+        char length_env[255];
+
+        sprintf(meth_env, "REQUEST_METHOD=%s", method);
+        putenv(meth_env);
+
+        if (strcasecmp(method, "GET") == 0)
+        {
+            sprintf(query_env, "QUERY_STRING=%s", query_string);
+            putenv(query_env);
+        }
+        else if (strcasecmp(method, "POST") == 0)
+        {
+            sprintf(length_env, "CONTENT_LENGTH=%d", content_length);
+            putenv(length_env);
         }
 
-        close(cgi_output[0]);
-        close(cgi_input[1]);
-        waitpid(pid, &status, 0);
+        execl(path, path, NULL);
+        exit(0);
     }
 }
 

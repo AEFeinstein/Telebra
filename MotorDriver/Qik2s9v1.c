@@ -367,7 +367,6 @@ uint8_t QueueQikCommand(uint8_t * buf, uint8_t len, bool expectResponse)
     size_t i;
     int16_t sizeUsed;
 
-    printf("QueueQikCommand %d %d\n", len, expectResponse);
     /* Request a mutex lock */
     pthread_mutex_lock(&qikMutex);
 
@@ -400,8 +399,6 @@ uint8_t QueueQikCommand(uint8_t * buf, uint8_t len, bool expectResponse)
         qikCommandQueueTail = (qikCommandQueueTail + 1) % QIK_ACTION_QUEUE_SIZE;
     }
 
-    printf("qikCommandQueue %4d %4d\n", qikCommandQueueHead, qikCommandQueueTail);
-
     /* Unlock the mutex */
     pthread_mutex_unlock(&qikMutex);
 
@@ -419,9 +416,8 @@ void DequeueQikCommand(void)
     uint8_t tmpCmd[16] = {0};
 
     /* If there's something in the queue */
-    if(qikCommandQueueHead != qikCommandQueueTail)
+    while(qikCommandQueueHead != qikCommandQueueTail)
     {
-        printf("Deque\n");
         /* Pull out the length byte */
         len = qikCommandQueue[qikCommandQueueHead];
         qikCommandQueueHead = (qikCommandQueueHead + 1) % QIK_ACTION_QUEUE_SIZE;
@@ -436,8 +432,6 @@ void DequeueQikCommand(void)
             tmpCmd[i] = qikCommandQueue[qikCommandQueueHead];
             qikCommandQueueHead = (qikCommandQueueHead + 1) % QIK_ACTION_QUEUE_SIZE;
         }
-
-        printf("qikCommandQueue %4d %4d\n", qikCommandQueueHead, qikCommandQueueTail);
 
         /* Send the serial command */
         sendCommand(tmpCmd, len, expectsResponse);
